@@ -3,7 +3,7 @@ import shutil
 import zipfile
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
-from summarize_sop import read_docx, generate_summary, save_as_json, save_as_txt
+from summarize_sop import read_docx, generate_summary, save_as_json, save_as_txt, save_as_docx, save_as_html, save_as_pdf
 
 app = FastAPI(
     title="SOP Summarizer API",
@@ -16,7 +16,7 @@ def read_root():
     return RedirectResponse(url="/docs")
 
 @app.post("/summarize")
-async def summarize_document(file: UploadFile = File(...)):
+def summarize_document(file: UploadFile = File(...)):
     # Create output directory if it doesn't exist
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
@@ -25,7 +25,14 @@ async def summarize_document(file: UploadFile = File(...)):
     temp_docx_path = f"temp_{file.filename}"
     output_json_path = os.path.join(output_dir, "summary.json")
     output_txt_path = os.path.join(output_dir, "summary.txt")
+    output_docx_path = os.path.join(output_dir, "summary_filled.docx")
+    output_html_path = os.path.join(output_dir, "summary.html")
+    output_pdf_path = os.path.join(output_dir, "summary.pdf")
     output_zip_path = os.path.join(output_dir, "summary_files.zip")
+    
+    # Path to the base templates
+    template_docx = os.path.join("input", "template.docx")
+    template_html = os.path.join("input", "template.html")
     
     try:
         # Save uploaded DOCX file temporarily
@@ -38,14 +45,33 @@ async def summarize_document(file: UploadFile = File(...)):
         # 2. Generate Summary via OpenAI
         summary_data = generate_summary(document_text)
         
-        # 3. Save as JSON and TXT
+        # 3. Save as JSON, TXT, DOCX, and HTML
         save_as_json(summary_data, output_json_path)
         save_as_txt(summary_data, output_txt_path)
+        
+        has_docx = False
+        if os.path.exists(template_docx):
+            save_as_docx(summary_data, template_docx, output_docx_path)
+            has_docx = True
+            
+        has_html = False
+        has_pdf = False
+        if os.path.exists(template_html):
+            save_as_html(summary_data, template_html, output_html_path)
+            has_html = True
+            save_as_pdf(output_html_path, output_pdf_path)
+            has_pdf = True
         
         # 4. Zip the files together
         with zipfile.ZipFile(output_zip_path, 'w') as zipf:
             zipf.write(output_json_path, arcname="summary.json")
             zipf.write(output_txt_path, arcname="summary.txt")
+            if has_docx:
+                zipf.write(output_docx_path, arcname="summary_filled.docx")
+            if has_html:
+                zipf.write(output_html_path, arcname="summary.html")
+            if has_pdf:
+                zipf.write(output_pdf_path, arcname="summary.pdf")
             
         # 5. Return the ZIP file
         return FileResponse(
