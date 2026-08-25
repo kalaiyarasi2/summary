@@ -1,0 +1,6 @@
+python-docx
+openai
+python-dotenv
+fastapi
+uvicorn
+python-multipart
