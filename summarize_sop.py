@@ -11,11 +11,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def read_docx(file_path):
-    """Reads text from a .docx file."""
+    """Reads text and tables from a .docx file."""
     doc = Document(file_path)
     full_text = []
+    
+    # Extract regular paragraphs
     for para in doc.paragraphs:
-        full_text.append(para.text)
+        if para.text.strip():
+            full_text.append(para.text.strip())
+            
+    # Extract tables
+    for table in doc.tables:
+        for row in table.rows:
+            row_data = []
+            for cell in row.cells:
+                text = cell.text.strip().replace('\n', ' ')
+                if text:
+                    row_data.append(text)
+            if row_data:
+                full_text.append(" | ".join(row_data))
+                
     return '\n'.join(full_text)
 
 def generate_summary(text):
@@ -24,26 +39,23 @@ def generate_summary(text):
 
     system_prompt = """
 You are an expert payroll processor and technical writer. 
-Your task is to read the provided SOP document and write a concise, high-level summary for each of the following specific headers. 
-DO NOT copy and paste exact text or step-by-step instructions from the document. Instead, synthesize the information into brief summaries or short bullet points for each section.
+Your task is to read the provided SOP document and extract/summarize information dynamically into a JSON object.
 
-Headers to summarize and expected format:
-1. "PROCESS OVERVIEW": Must be a nested JSON object with keys "System", "Trigger", "TAT", "Accuracy". Extract these if they exist in the DOCX; otherwise, set them to null. Use key: `process_overview`
-2. "1. REQUEST VALIDATION": A short summary string or array of bullet points. Use key: `request_validation`
-3. "2. PAYROLL SETUP": A short summary string or array of bullet points. Use key: `payroll_setup`
-4. "3. CONFIGURATION": A short summary string or array of bullet points. Use key: `configuration`
-5. "4. PROCESSING": A short summary string or array of bullet points. Use key: `processing`
-6. "5. QUALITY CHECK (CRITICAL)": A short summary string or array of bullet points. Use key: `quality_check`
-7. "6. ADMIN FEE VALIDATION": A short summary string or array of bullet points. Use key: `admin_fee_validation`
-8. "7. APPROVAL FLOW": A short summary string or array of bullet points. Use key: `approval_flow`
-9. "8. FINALIZATION": A short summary string or array of bullet points. Use key: `finalization`
-10. "SPECIAL CASES (IF NEEDED)": A short summary string or array of bullet points. Use key: `special_cases`
-11. "QUICK CHECKLIST": Synthesize a high-level array of checklist items based on the overall document steps. Use key: `quick_checklist`
-12. "FULL SOP LINK": Extract if present, else null. Use key: `full_sop_link`
-13. "Frequency": Extract if present, else null. Use key: `frequency`
-14. "CONTACT": Extract if present, else null. Use key: `contact`
+Follow these instructions carefully to populate the JSON output:
 
-Ensure the output is strictly in JSON format using the keys specified above (e.g. `request_validation`, not `1. REQUEST VALIDATION`). Note that if information like TAT, Accuracy, Frequency, or Contact is missing from the DOCX source text, you must output null for them.
+1. `title`: Extract the "Process Name" from the document and use it as the title (e.g., "Backdated PTO Process"). If not found, use a descriptive title based on the document content.
+2. `process_overview`: Create a nested JSON object with keys "System", "Trigger", "TAT", "Accuracy".
+   - For "System", look for "Software / Application Used" and extract it.
+   - For "Trigger", strictly search the document for the exact phrase "Triggered By" (even if inside a table) and extract the text immediately following or associated with it (e.g. "Emails").
+   - Extract "TAT" and "Accuracy" if they exist; otherwise set to null.
+3. `dynamic_sections`: Locate the "INDEX" section in the document, specifically looking under the "Procedure with Screen Shots" part. Extract the list of sub-procedures (e.g., "Check Backdated PTO Requests", "Create Special Payroll", etc.). For each of these sub-procedures, read the corresponding content in the document and provide a concise summary or short bullet points. The output must be an array of objects, each containing a `header` (the sub-procedure name) and `summary` (string or array of bullet points).
+4. `quick_checklist`: Generate a high-level array of checklist items by summarizing the content found specifically in the "Procedure Overview" section of the document.
+5. `special_cases`: A short summary string or array of bullet points for special cases if they exist. Use key: `special_cases`. If none, set to null.
+6. `full_sop_link`: Extract if present, else null. Use key: `full_sop_link`.
+7. `frequency`: Extract if present, else null. Use key: `frequency`.
+8. `contact`: Extract if present, else null. Use key: `contact`.
+
+Ensure the output is strictly in JSON format. Do not copy and paste exact text for summaries; synthesize the information. Note that if information like TAT, Accuracy, Frequency, or Contact is missing from the DOCX source text, you must output null for them.
 """
 
     response = client.chat.completions.create(
@@ -125,13 +137,26 @@ def save_as_pdf(html_path, pdf_path):
 
 
 if __name__ == "__main__":
-    input_docx = r"c:\Users\Intern\summary & chatbot\input\SOP_Emplova_Off-cycle Payroll Process_V1.1 (1).docx"
-    output_json = r"c:\Users\Intern\summary & chatbot\output\summary.json"
-    output_txt = r"c:\Users\Intern\summary & chatbot\output\summary.txt"
+    input_docx = r"c:\Users\Intern\summary & chatbot\SOP_Emplova_Backdated PTO_V1.0.docx"
+    
+    # Create output directory based on the input filename
+    base_name = os.path.splitext(os.path.basename(input_docx))[0]
+    out_dir = os.path.join(r"c:\Users\Intern\summary & chatbot\output", base_name)
+    os.makedirs(out_dir, exist_ok=True)
+
+    extracted_text_path = os.path.join(out_dir, "extracted_text.txt")
+    output_json = os.path.join(out_dir, "summary.json")
+    output_txt = os.path.join(out_dir, "summary.txt")
 
     print("Reading DOCX file...")
     try:
         document_text = read_docx(input_docx)
+        
+        # Save the extracted text to a local file for inspection
+        with open(extracted_text_path, "w", encoding="utf-8") as f:
+            f.write(document_text)
+        print(f"Saved exact text read by LLM to {extracted_text_path}")
+        
     except Exception as e:
         print(f"Error reading docx: {e}")
         exit(1)
@@ -144,23 +169,20 @@ if __name__ == "__main__":
         exit(1)
 
     print("Saving outputs...")
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_json), exist_ok=True)
-    
     save_as_json(summary_data, output_json)
     save_as_txt(summary_data, output_txt)
     
     # Use standard templates for standalone run
-    template_docx = r"c:\Users\Intern\summary & chatbot\input\template.docx"
-    output_docx = r"c:\Users\Intern\summary & chatbot\output\summary.docx"
+    template_docx = r"c:\Users\Intern\summary & chatbot\input\template_grid.docx"
+    output_docx = os.path.join(out_dir, "summary.docx")
     if os.path.exists(template_docx):
         save_as_docx(summary_data, template_docx, output_docx)
     else:
         print(f"Template not found at {template_docx}, skipping save_as_docx")
         
     template_html = r"c:\Users\Intern\summary & chatbot\input\template.html"
-    output_html = r"c:\Users\Intern\summary & chatbot\output\summary.html"
-    output_pdf = r"c:\Users\Intern\summary & chatbot\output\summary.pdf"
+    output_html = os.path.join(out_dir, "summary.html")
+    output_pdf = os.path.join(out_dir, "summary.pdf")
     
     if os.path.exists(template_html):
         save_as_html(summary_data, template_html, output_html)

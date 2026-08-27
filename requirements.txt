@@ -5,5 +5,12 @@ fastapi
 uvicorn
 python-multipart
 docxtpl
-playwright  
- 
+playwright
+sqlalchemy
+msal
+requests
+pymupdf
+openpyxl
+chromadb
+rank_bm25
+sentence-transformers

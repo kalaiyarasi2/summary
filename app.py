@@ -17,21 +17,23 @@ def read_root():
 
 @app.post("/summarize")
 def summarize_document(file: UploadFile = File(...)):
-    # Create output directory if it doesn't exist
-    output_dir = "output"
+    # Create output directory based on the input filename
+    base_name = os.path.splitext(file.filename)[0]
+    output_dir = os.path.join("output", base_name)
     os.makedirs(output_dir, exist_ok=True)
     
     # Temporary paths
     temp_docx_path = f"temp_{file.filename}"
+    extracted_text_path = os.path.join(output_dir, "extracted_text.txt")
     output_json_path = os.path.join(output_dir, "summary.json")
     output_txt_path = os.path.join(output_dir, "summary.txt")
     output_docx_path = os.path.join(output_dir, "summary_filled.docx")
     output_html_path = os.path.join(output_dir, "summary.html")
     output_pdf_path = os.path.join(output_dir, "summary.pdf")
-    output_zip_path = os.path.join(output_dir, "summary_files.zip")
+    output_zip_path = os.path.join("output", f"{base_name}_summary_files.zip")
     
     # Path to the base templates
-    template_docx = os.path.join("input", "template.docx")
+    template_docx = os.path.join("input", "template_grid.docx")
     template_html = os.path.join("input", "template.html")
     
     try:
@@ -41,6 +43,10 @@ def summarize_document(file: UploadFile = File(...)):
             
         # 1. Read DOCX
         document_text = read_docx(temp_docx_path)
+        
+        # Save extracted text
+        with open(extracted_text_path, "w", encoding="utf-8") as f:
+            f.write(document_text)
         
         # 2. Generate Summary via OpenAI
         summary_data = generate_summary(document_text)
@@ -64,6 +70,7 @@ def summarize_document(file: UploadFile = File(...)):
         
         # 4. Zip the files together
         with zipfile.ZipFile(output_zip_path, 'w') as zipf:
+            zipf.write(extracted_text_path, arcname="extracted_text.txt")
             zipf.write(output_json_path, arcname="summary.json")
             zipf.write(output_txt_path, arcname="summary.txt")
             if has_docx:
@@ -76,7 +83,7 @@ def summarize_document(file: UploadFile = File(...)):
         # 5. Return the ZIP file
         return FileResponse(
             path=output_zip_path, 
-            filename="summary_files.zip", 
+            filename=f"{base_name}_summary.zip", 
             media_type="application/zip"
         )
         
