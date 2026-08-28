@@ -135,6 +135,20 @@ def save_as_pdf(html_path, pdf_path):
         browser.close()
     print(f"Saved PDF to {pdf_path}")
 
+def merge_docx_files(master_path, append_path, output_path):
+    """Merges two docx files, appending the second to the first with a page break."""
+    from docxcompose.composer import Composer
+    from docx import Document
+    
+    master = Document(master_path)
+    master.add_page_break()
+    
+    composer = Composer(master)
+    doc2 = Document(append_path)
+    
+    composer.append(doc2)
+    composer.save(output_path)
+    print(f"Merged {master_path} and {append_path} into {output_path}")
 
 if __name__ == "__main__":
     input_docx = r"c:\Users\Intern\summary & chatbot\SOP_Emplova_Backdated PTO_V1.0.docx"

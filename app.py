@@ -3,7 +3,7 @@ import shutil
 import zipfile
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
-from summarize_sop import read_docx, generate_summary, save_as_json, save_as_txt, save_as_docx, save_as_html, save_as_pdf
+from summarize_sop import read_docx, generate_summary, save_as_json, save_as_txt, save_as_docx, save_as_html, save_as_pdf, merge_docx_files
 
 app = FastAPI(
     title="SOP Summarizer API",
@@ -28,6 +28,7 @@ def summarize_document(file: UploadFile = File(...)):
     output_json_path = os.path.join(output_dir, "summary.json")
     output_txt_path = os.path.join(output_dir, "summary.txt")
     output_docx_path = os.path.join(output_dir, "summary_filled.docx")
+    merged_docx_path = os.path.join(output_dir, "combined_summary.docx")
     output_html_path = os.path.join(output_dir, "summary.html")
     output_pdf_path = os.path.join(output_dir, "summary.pdf")
     output_zip_path = os.path.join("output", f"{base_name}_summary_files.zip")
@@ -58,6 +59,7 @@ def summarize_document(file: UploadFile = File(...)):
         has_docx = False
         if os.path.exists(template_docx):
             save_as_docx(summary_data, template_docx, output_docx_path)
+            merge_docx_files(temp_docx_path, output_docx_path, merged_docx_path)
             has_docx = True
             
         has_html = False
@@ -74,7 +76,7 @@ def summarize_document(file: UploadFile = File(...)):
             zipf.write(output_json_path, arcname="summary.json")
             zipf.write(output_txt_path, arcname="summary.txt")
             if has_docx:
-                zipf.write(output_docx_path, arcname="summary_filled.docx")
+                zipf.write(merged_docx_path, arcname="combined_summary.docx")
             if has_html:
                 zipf.write(output_html_path, arcname="summary.html")
             if has_pdf:
