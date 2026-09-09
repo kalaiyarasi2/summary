@@ -3,7 +3,6 @@ import json
 from docx import Document
 from docxtpl import DocxTemplate
 from jinja2 import Environment, FileSystemLoader
-from playwright.sync_api import sync_playwright
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -118,6 +117,12 @@ def save_as_html(data, template_path, output_path):
 
 def save_as_pdf(html_path, pdf_path):
     """Uses playwright to convert an HTML file to PDF."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[WARN] Playwright is not installed. Skipping PDF generation.")
+        return
+
     # Convert absolute or relative HTML path to a file:// URI
     file_uri = f"file:///{os.path.abspath(html_path).replace(chr(92), '/')}"
     
