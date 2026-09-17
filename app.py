@@ -34,12 +34,8 @@ def health_check():
     return {"status": "healthy", "service": "SOP Summarizer & Chatbot API"}
 
 @app.post("/summarize")
-def summarize_document(
-    file: UploadFile = File(...),
-    return_zip: bool = Query(False, description="If true, returns the raw zip file download immediately")
-):
+def summarize_document(file: UploadFile = File(...)):
     base_name = os.path.splitext(file.filename or "document")[0]
-    # Clean base name for safe pathing
     safe_base_name = "".join(c for c in base_name if c.isalnum() or c in ("-", "_")).strip() or "sop_document"
     
     output_dir = BASE_DIR / "output" / safe_base_name
@@ -108,14 +104,6 @@ def summarize_document(
             if has_pdf and output_pdf_path.exists():
                 zipf.write(str(output_pdf_path), arcname="summary.pdf")
             
-        if return_zip:
-            return FileResponse(
-                path=str(output_zip_path), 
-                filename=f"{safe_base_name}_summary.zip", 
-                media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="{safe_base_name}_summary.zip"'}
-            )
-
         return {
             "status": "success",
             "session_id": safe_base_name,
