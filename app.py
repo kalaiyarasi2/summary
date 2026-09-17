@@ -59,7 +59,7 @@ def summarize_document(file: UploadFile = File(...)):
         has_docx = False
         if os.path.exists(template_docx):
             save_as_docx(summary_data, template_docx, output_docx_path)
-            merge_docx_files(temp_docx_path, output_docx_path, merged_docx_path)
+            merge_docx_files(output_docx_path, temp_docx_path, merged_docx_path)
             has_docx = True
             
         has_html = False
