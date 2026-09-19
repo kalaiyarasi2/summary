@@ -67,6 +67,12 @@ Ensure the output is strictly in JSON format. Do not copy and paste exact text f
         temperature=0.2
     )
 
+    try:
+        from core.universal_token_monitor import track_usage as _tm
+        _tm(response.usage, model="gpt-4o", poc_name="SOP SUMMARIZER")
+    except ImportError:
+        pass
+
     return json.loads(response.choices[0].message.content)
 
 def save_as_json(data, output_path):

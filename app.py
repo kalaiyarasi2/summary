@@ -4,7 +4,7 @@ import zipfile
 import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, Body, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from summarize_sop import read_docx, generate_summary, save_as_json, save_as_txt, save_as_docx, save_as_html, save_as_pdf, merge_docx_files
@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent.resolve()
 load_dotenv(BASE_DIR / ".env")
+
+try:
+    from database.poc_db import log_universal as _log_uni
+except ImportError:
+    _log_uni = None
 
 app = FastAPI(
     title="SOP Summarizer & Chatbot API",
@@ -34,7 +39,21 @@ def health_check():
     return {"status": "healthy", "service": "SOP Summarizer & Chatbot API"}
 
 @app.post("/summarize")
-def summarize_document(file: UploadFile = File(...)):
+def summarize_document(
+    request: Request,
+    file: UploadFile = File(...),
+    return_zip: bool = Query(False, description="If true, returns the raw zip file download immediately")
+):
+    processed_by = request.headers.get("X-User-Email") or request.headers.get("x-user-email") or "SYSTEM"
+    
+    if _log_uni:
+        _log_uni(
+            module="Summary & Chatbot", action="extract",
+            status="STARTED",
+            processed_by=processed_by,
+            file_name=file.filename or "unknown",
+            details="Starting SOP summarization"
+        )
     base_name = os.path.splitext(file.filename or "document")[0]
     safe_base_name = "".join(c for c in base_name if c.isalnum() or c in ("-", "_")).strip() or "sop_document"
     
@@ -104,12 +123,59 @@ def summarize_document(file: UploadFile = File(...)):
             if has_pdf and output_pdf_path.exists():
                 zipf.write(str(output_pdf_path), arcname="summary.pdf")
             
-        return FileResponse(
-            path=str(output_zip_path),
-            filename=f"{safe_base_name}_summary.zip",
-            media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{safe_base_name}_summary.zip"'}
-        )
+        if return_zip:
+            return FileResponse(
+                path=str(output_zip_path), 
+                filename=f"{safe_base_name}_summary.zip", 
+                media_type="application/zip",
+                headers={"Content-Disposition": f'attachment; filename="{safe_base_name}_summary.zip"'}
+            )
+
+        if _log_uni:
+            _log_uni(
+                module="Summary & Chatbot", action="extract",
+                status="SUCCESS",
+                processed_by=processed_by,
+                file_name=file.filename or "unknown",
+                details="SOP summary generated successfully"
+            )
+
+        return {
+            "status": "success",
+            "session_id": safe_base_name,
+            "filename": file.filename,
+            "summary": summary_data,
+            "files_available": {
+                "json": output_json_path.exists(),
+                "txt": output_txt_path.exists(),
+                "docx": output_docx_path.exists(),
+                "summary_docx": output_docx_path.exists(),
+                "combined_docx": merged_docx_path.exists(),
+                "html": output_html_path.exists(),
+                "pdf": output_pdf_path.exists(),
+                "zip": output_zip_path.exists(),
+            },
+            "download_urls": {
+                "zip": f"/api/summary/download/{safe_base_name}/zip",
+                "pdf": f"/api/summary/download/{safe_base_name}/pdf",
+                "docx": f"/api/summary/download/{safe_base_name}/summary_docx",
+                "summary_docx": f"/api/summary/download/{safe_base_name}/summary_docx",
+                "combined_docx": f"/api/summary/download/{safe_base_name}/combined_docx",
+                "html": f"/api/summary/download/{safe_base_name}/html",
+                "json": f"/api/summary/download/{safe_base_name}/json",
+                "txt": f"/api/summary/download/{safe_base_name}/txt",
+            }
+        }
+    except Exception as e:
+        if _log_uni:
+            _log_uni(
+                module="Summary & Chatbot", action="extract",
+                status="FAILED",
+                processed_by=processed_by,
+                file_name=file.filename or "unknown",
+                details=f"Error: {str(e)}"
+            )
+        raise e
         
     finally:
         if temp_docx_path.exists():
