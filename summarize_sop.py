@@ -141,6 +141,13 @@ def save_as_pdf(html_path, pdf_path):
         # Wait for fonts/styles to load (if any network resources are used)
         page.wait_for_load_state("networkidle")
         
+        # Ensure column-wise flow pagination executes cleanly
+        try:
+            page.evaluate("() => { if (window.paginateSOP) window.paginateSOP(); }")
+            page.wait_for_timeout(250)
+        except Exception:
+            pass
+        
         # Save as PDF (print background to keep colors)
         page.pdf(path=pdf_path, format="A4", print_background=True)
         browser.close()
